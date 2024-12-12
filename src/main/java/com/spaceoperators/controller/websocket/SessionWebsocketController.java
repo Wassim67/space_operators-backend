@@ -2,6 +2,7 @@ package com.spaceoperators.controller.websocket;
 
 import com.spaceoperators.dao.SessionDao;
 import com.spaceoperators.model.request.PlayerSessionRequest;
+import com.spaceoperators.model.response.OperationMessage;
 import com.spaceoperators.model.response.PlayerSessionResponse;
 import com.spaceoperators.model.Player;
 import com.spaceoperators.model.response.PlayerData;
@@ -12,9 +13,14 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+import com.spaceoperators.service.SessionService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Controller
 @CrossOrigin(origins = "*")
@@ -22,6 +28,17 @@ public class SessionWebsocketController {
 
 	@Autowired
 	private SessionDao sessionDao;
+
+	@Autowired
+	private SessionService sessionService;
+
+	// Map pour gérer les planifications par session
+	private final Map<String, ScheduledExecutorService> sessionSchedulers = new ConcurrentHashMap<>();
+
+	// Map pour gérer les statuts des sessions
+	private final Map<String, Boolean> gameStatus = new ConcurrentHashMap<>();
+
+	private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();  // Création d'un ScheduledExecutorService c'est pour gerer la planification des tours
 
 	@Autowired
 	private SimpMessagingTemplate messagingTemplate;
@@ -125,9 +142,9 @@ public class SessionWebsocketController {
 	}
 
 	/**
-	 * Gère les messages de démarrage de session envoyés par le front-end.
+	 * Démarre une session de jeu et lance les tours.
 	 *
-	 * @param message Le message JSON contenant le gameId.
+	 * @param message Le message contenant les données de la session.
 	 */
 	@MessageMapping("/start")
 	public void startGameSession(@RequestBody Map<String, Object> message) {
@@ -144,12 +161,94 @@ public class SessionWebsocketController {
 				return;
 			}
 
-			// Notifier que la session a démarré
+			// Notifie les joueurs que la session commence
 			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of("type", ACTION_START));
+
+			// Initialiser la session comme en cours
+			gameStatus.put(gameId, true);
+
+			System.out.println(gameStatus + " voici le game statut");
+
+			// Démarre le prochain tour immédiatement
+			sendNextTurn(gameId);
+
+			// Crée un planificateur pour cette session de jeu si ce n'est pas déjà fait
+			sessionSchedulers.putIfAbsent(gameId, Executors.newSingleThreadScheduledExecutor());
+
+			// Après le délai du tour on ajoute 5s puis on envoie le prochain tour
+			scheduleNextTurn(gameId);
+
 		} catch (Exception e) {
 			sendErrorMessage("Failed to process 'start' message: " + e.getMessage());
 		}
 	}
+
+	private void scheduleNextTurn(String gameId) {
+		// Vérifier l'état de la session
+		if (!gameStatus.getOrDefault(gameId, true)) {
+			// Si le jeu est terminé, ne planifiez pas de nouveau tour
+			return;
+		}
+
+		int duration = sessionService.getDuration();
+		ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
+
+		// Vérifier si le planificateur existe
+		if (scheduler != null) {
+			// Planifier le prochain tour seulement si la session est encore en cours
+			scheduler.schedule(() -> {
+				sendNextTurn(gameId);  // Exécute le tour suivant
+				scheduleNextTurn(gameId);  // Replanifie le prochain tour
+			}, duration + 5, TimeUnit.SECONDS);  // Délai = durée du tour + 5 secondes d'attente
+		}
+	}
+
+
+
+	/**
+	 * Envoie le prochain tour pour une session donnée.
+	 *
+	 * @param gameId L'identifiant du jeu.
+	 */
+	private void sendNextTurn(String gameId) {
+		// Vérifiez si la session est toujours active (en cours)
+		if (!gameStatus.getOrDefault(gameId, true)) {
+			// Si la session est terminée, n'envoyez pas de nouveau tour
+			return;
+		}
+
+		OperationMessage nextTurn = sessionService.getNextTurn();
+		if (nextTurn != null) {
+			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+					"type", "operation",
+					"data", nextTurn
+			));
+		} else {
+			// Fin du jeu, notifier les joueurs
+			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+					"type", "game-end",
+					"message", "The game session has ended"
+			));
+
+			// Marquer la session comme terminée
+			gameStatus.put(gameId, false);
+
+			// Supprimer la session du statut des jeux (plus de sessions terminées dans gameStatus)
+			gameStatus.remove(gameId);  // Suppression de la session terminée
+
+
+			// Supprimer le planificateur pour arrêter tout traitement
+			ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
+			if (scheduler != null) {
+				scheduler.shutdown(); // Arrêter le planificateur
+				sessionSchedulers.remove(gameId); // Supprimer du map
+			}
+		}
+	}
+
+
+
+
 
 	/**
 	 * Envoie un message d'erreur à tous les abonnés.
