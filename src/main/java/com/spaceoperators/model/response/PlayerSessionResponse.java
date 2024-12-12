@@ -1,11 +1,11 @@
-package com.spaceoperators.model;
+package com.spaceoperators.model.response;
 
-public class ConnectResponse {
+public class PlayerSessionResponse {
 	private String status;
 	private String message;
 
 	// Constructeur
-	public ConnectResponse(String status, String message) {
+	public PlayerSessionResponse(String status, String message) {
 		this.status = status;
 		this.message = message;
 	}

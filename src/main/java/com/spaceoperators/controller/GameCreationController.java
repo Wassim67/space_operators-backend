@@ -9,35 +9,33 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @RestController
 @RequestMapping("/api/create-game")
-public class CreateGame {
+public class GameCreationController {
 
     private final GameDao gameDao;
     private final SessionDao sessionDao;
 
     @Autowired
-    public CreateGame(GameDao gameDao, SessionDao sessionDao) {
+    public GameCreationController(GameDao gameDao, SessionDao sessionDao) {
         this.gameDao = gameDao;
         this.sessionDao = sessionDao;
     }
 
-    // Endpoint accessible via /create-game qui crée un jeu, puis une session
+    // Endpoint accessible via /create-game qui crée une partie
     @PostMapping
     public int createGame() {
+        // TODO: améliorer la gestion de génération de numéro de partie
         // Crée un numéro aléatoire pour le jeu
         Random random = new Random();
         int randomNumber = 1000 + random.nextInt(9000); // Génère un nombre entre 1000 et 9999
 
-        // Insérer un nouveau jeu dans la base de données (id_game, theme, etc.)
-        String choiceTheme = "Space Adventure";  // Exemple de thème pour le jeu
+        // TODO : Intégrer la génération de thème avec l'IA
+        String choiceTheme = "Space Adventure";  // Temporaire
         int integrity = 100;
-        String gameName = "space test";  // Exemple de nom du jeu
-        String state = "in_progress";  // Exemple d'état du jeu
+        String gameName = "space test";  // Temporaire
+        String state = "in_progress";  // Temporaire pour V2
 
         // Insérer le jeu dans la table game
         gameDao.insertGame(randomNumber, choiceTheme, integrity, gameName, state, null);
-
-        // Insère une session liée à ce jeu
-        // sessionDao.insertSession(String.valueOf(randomNumber), null);
 
         return randomNumber; // Retourne le code du jeu créé (id_game)
     }

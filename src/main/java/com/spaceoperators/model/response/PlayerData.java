@@ -13,4 +13,11 @@ public class PlayerData {
     public List<Player> getPlayers() {
         return players;
     }
+
+    @Override
+    public String toString() {
+        return "PlayerData{" +
+                "players=" + players +
+                '}';
+    }
 }

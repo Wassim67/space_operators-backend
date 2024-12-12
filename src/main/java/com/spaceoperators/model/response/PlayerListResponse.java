@@ -16,4 +16,13 @@ public class PlayerListResponse {
     public PlayerData getData() {
         return data;
     }
+
+    @Override
+    public String toString() {
+        return "PlayerListResponse{" +
+                "type='" + type + '\'' +
+                ", data=" + data +
+                '}';
+    }
+
 }

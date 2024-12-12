@@ -1,9 +1,10 @@
-package com.spaceoperators.model;
+package com.spaceoperators.model.request;
 
-public class ConnectRequest {
+public class PlayerSessionRequest {
 	private String gameId;
 	private String playerId;
 	private String playerName;
+	private Boolean isReady;
 
 	// Getters et Setters
 	public String getGameId() {
@@ -28,5 +29,9 @@ public class ConnectRequest {
 
 	public void setPlayerName(String playerName) {
 		this.playerName = playerName;
+	}
+
+	public Boolean getIsReadyPlayer() {
+		return isReady;
 	}
 }
