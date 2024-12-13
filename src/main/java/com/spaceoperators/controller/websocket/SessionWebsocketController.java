@@ -1,6 +1,7 @@
 package com.spaceoperators.controller.websocket;
 
 import com.spaceoperators.dao.SessionDao;
+import com.spaceoperators.model.GameSession;
 import com.spaceoperators.model.request.PlayerSessionRequest;
 import com.spaceoperators.model.response.OperationMessage;
 import com.spaceoperators.model.response.PlayerSessionResponse;
@@ -161,21 +162,22 @@ public class SessionWebsocketController {
 				return;
 			}
 
+			// Initialiser une nouvelle session de jeu
+			sessionService.startNewGame(gameId);
+
 			// Notifie les joueurs que la session commence
-			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of("type", ACTION_START));
+			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of("type", "start"));
 
 			// Initialiser la session comme en cours
 			gameStatus.put(gameId, true);
 
-			System.out.println(gameStatus + " voici le game statut");
-
 			// Démarre le prochain tour immédiatement
 			sendNextTurn(gameId);
 
-			// Crée un planificateur pour cette session de jeu si ce n'est pas déjà fait
+			// Crée un planificateur pour cette session de jeu
 			sessionSchedulers.putIfAbsent(gameId, Executors.newSingleThreadScheduledExecutor());
 
-			// Après le délai du tour on ajoute 5s puis on envoie le prochain tour
+			// Planifie le prochain tour
 			scheduleNextTurn(gameId);
 
 		} catch (Exception e) {
@@ -183,23 +185,92 @@ public class SessionWebsocketController {
 		}
 	}
 
+	@MessageMapping("/finish-operation")
+	public void handleFinishOperation(@RequestBody Map<String, Object> message) {
+		try {
+			Object data = message.get("data");
+			if (!(data instanceof Map)) {
+				sendErrorMessage("Invalid message format");
+				return;
+			}
+
+			Map<?, ?> dataMap = (Map<?, ?>) data;
+			String operator = (String) dataMap.get("operator");
+			Boolean success = (Boolean) dataMap.get("success");
+
+			// Récupérer le gameId à partir de l'opérateur
+			String gameId = sessionDao.getGameIdForPlayer(operator);
+			GameSession session = sessionService.getGameSession(gameId);
+
+			if (session != null) {
+				session.setTurnCompleted(true);
+
+				if (!success) {
+					// Si l'opération a échoué, diminuer l'intégrité
+					session.decreaseIntegrity(10);
+
+					// Envoyer la mise à jour de l'intégrité
+					messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+							"type", "integrity",
+							"data", Map.of("integrity", session.getIntegrity())
+					));
+
+					// Vérifier si le vaisseau est détruit
+					if (session.getIntegrity() <= 0) {
+						messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+								"type", "destroyed",
+								"data", Map.of("turns", session.getCurrentTurn() - 1)
+						));
+						endGame(gameId);
+						return;
+					}
+				}
+			}
+		} catch (Exception e) {
+			sendErrorMessage("Failed to process finish message: " + e.getMessage());
+		}
+	}
+
 	private void scheduleNextTurn(String gameId) {
-		// Vérifier l'état de la session
 		if (!gameStatus.getOrDefault(gameId, true)) {
-			// Si le jeu est terminé, ne planifiez pas de nouveau tour
 			return;
 		}
 
-		int duration = sessionService.getDuration();
+		GameSession session = sessionService.getGameSession(gameId);
+		if (session == null) {
+			return;
+		}
+
+		int duration = session.getDuration();
 		ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
 
-		// Vérifier si le planificateur existe
 		if (scheduler != null) {
-			// Planifier le prochain tour seulement si la session est encore en cours
 			scheduler.schedule(() -> {
-				sendNextTurn(gameId);  // Exécute le tour suivant
-				scheduleNextTurn(gameId);  // Replanifie le prochain tour
-			}, duration + 5, TimeUnit.SECONDS);  // Délai = durée du tour + 5 secondes d'attente
+				// Vérifier si le tour a été complété
+				if (!session.isTurnCompleted()) {
+					// Diminuer l'intégrité car le tour n'a pas été complété à temps
+					session.decreaseIntegrity(30);
+
+					// Envoyer la mise à jour de l'intégrité
+					messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+							"type", "integrity",
+							"data", Map.of("integrity", session.getIntegrity())
+					));
+
+					// Vérifier si le vaisseau est détruit
+					if (session.getIntegrity() <= 0) {
+						messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+								"type", "destroyed",
+								"data", Map.of("turns", session.getCurrentTurn())
+						));
+						endGame(gameId);
+						return;
+					}
+				}
+
+				sendNextTurn(gameId);
+				scheduleNextTurn(gameId);
+			}, duration + 5, TimeUnit.SECONDS);
 		}
 	}
 
@@ -211,44 +282,41 @@ public class SessionWebsocketController {
 	 * @param gameId L'identifiant du jeu.
 	 */
 	private void sendNextTurn(String gameId) {
-		// Vérifiez si la session est toujours active (en cours)
-		if (!gameStatus.getOrDefault(gameId, true)) {
-			// Si la session est terminée, n'envoyez pas de nouveau tour
+		GameSession session = sessionService.getGameSession(gameId);
+		if (session == null || !gameStatus.getOrDefault(gameId, false)) {
 			return;
 		}
 
-		OperationMessage nextTurn = sessionService.getNextTurn();
+		OperationMessage nextTurn = session.getNextTurn();
 		if (nextTurn != null) {
 			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
 					"type", "operation",
 					"data", nextTurn
 			));
-		} else {
-			// Fin du jeu, notifier les joueurs
-			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-					"type", "game-end",
-					"message", "The game session has ended"
-			));
 
-			// Marquer la session comme terminée
-			gameStatus.put(gameId, false);
-
-			// Supprimer la session du statut des jeux (plus de sessions terminées dans gameStatus)
-			gameStatus.remove(gameId);  // Suppression de la session terminée
-
-
-			// Supprimer le planificateur pour arrêter tout traitement
-			ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
-			if (scheduler != null) {
-				scheduler.shutdown(); // Arrêter le planificateur
-				sessionSchedulers.remove(gameId); // Supprimer du map
+			// Vérifier si c'est le dernier tour réussi (20 tours)
+			if (session.getCurrentTurn() >= 5 && session.getIntegrity() > 0) {
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "victory"
+				));
+				endGame(gameId);
 			}
+		} else {
+			endGame(gameId);
 		}
 	}
 
+	private void endGame(String gameId) {
+		// Nettoyage de la session
+		gameStatus.remove(gameId);
+		sessionService.endSession(gameId);
 
-
-
+		ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
+		if (scheduler != null) {
+			scheduler.shutdown();
+			sessionSchedulers.remove(gameId);
+		}
+	}
 
 	/**
 	 * Envoie un message d'erreur à tous les abonnés.

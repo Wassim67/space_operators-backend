@@ -1,22 +1,61 @@
 package com.spaceoperators.service;
 
+import com.spaceoperators.model.GameSession;
 import com.spaceoperators.model.response.OperationMessage;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SessionService {
-    private List<OperationMessage> turns;
-    private int currentTurn;
+    private final Map<String, GameSession> gameSessions;
 
     public SessionService() {
-        this.turns = generateMockTurns();  // Utilisation des mocks en dur
-        this.currentTurn = 0;
+        this.gameSessions = new ConcurrentHashMap<>();
     }
 
-    // Générer cinq tours de jeu avec des boutons uniquement
+    // Démarrer une nouvelle partie avec un ID unique pour chaque session
+    public void startNewGame(String gameId) {
+        GameSession session = new GameSession(generateMockTurns());
+        gameSessions.put(gameId, session);
+    }
+
+    public GameSession getGameSession(String gameId) {
+        return gameSessions.get(gameId);
+    }
+
+
+    // Récupérer le prochain tour pour une session spécifique
+    public OperationMessage getNextTurn(String gameId) {
+        GameSession session = gameSessions.get(gameId);
+        if (session == null) {
+            return null; // Retourne null si la session n'existe pas
+        }
+        return session.getNextTurn();
+    }
+
+    // Obtenir la durée du tour actuel pour une session spécifique
+    public int getDuration(String gameId) {
+        GameSession session = gameSessions.get(gameId);
+        if (session == null) {
+            return -1; // Retourne -1 si la session n'existe pas
+        }
+        return session.getDuration();
+    }
+
+    // Terminer une session de jeu et la supprimer
+    public void endSession(String gameId) {
+        GameSession session = gameSessions.get(gameId);
+        if (session != null) {
+            session.endSession();
+            gameSessions.remove(gameId);
+        }
+    }
+
+    // Génération de tours fictifs (mock)
     private List<OperationMessage> generateMockTurns() {
         List<OperationMessage> turns = new ArrayList<>();
 
@@ -77,64 +116,25 @@ public class SessionService {
         );
         turns.add(turn3);
 
-        // Tour 4
+        // Tour 1
         OperationMessage turn4 = new OperationMessage(
-                4,  // Tour 4
-                "instructor",  // Rôle "instructor"
-                "CA-04",  // ID "CA-04"
+                4,  // Tour 1
+                "operator",  // Rôle "operator"
+                "CA-01",  // ID "CA-01"
                 10,  // Durée de 10 secondes
-                "Appuyer deux fois sur le bouton jaune",  // Description
+                "Appuyer sur les boutons rouges et verts",  // Description
                 List.of(  // Elements : uniquement des boutons
-                        new OperationMessage.Element("button", 10, "color", "#FFFF00"),
-                        new OperationMessage.Element("button", 11, "color", "#FF0000")
+                        new OperationMessage.Element("button", 4, "color", "#FF0000"),
+                        new OperationMessage.Element("button", 5, "color", "#00FF00")
                 ),
                 new OperationMessage.Result(  // Résultat avec boutons uniquement
-                        new OperationMessage.ButtonResult("random", List.of(10, 10)),
+                        new OperationMessage.ButtonResult("random", List.of(5, 4)),
                         new ArrayList<>(),  // Pas de switches
                         new ArrayList<>()
                 )
         );
         turns.add(turn4);
 
-        // Tour 5
-        OperationMessage turn5 = new OperationMessage(
-                5,  // Tour 5
-                "operator",  // Rôle "operator"
-                "CA-05",  // ID "CA-05"
-                10,  // Durée de 10 secondes
-                "Appuyer sur le bouton rouge puis sur le bouton bleu",  // Description
-                List.of(  // Elements : uniquement des boutons
-                        new OperationMessage.Element("button", 12, "color", "#FF0000"),
-                        new OperationMessage.Element("button", 13, "color", "#0000FF")
-                ),
-                new OperationMessage.Result(  // Résultat avec boutons uniquement
-                        new OperationMessage.ButtonResult("ordered", List.of(12, 13)),
-                        new ArrayList<>(),  // Pas de switches
-                        new ArrayList<>()
-                )
-        );
-        turns.add(turn5);
-
         return turns;
     }
-
-    public void startNewGame() {
-        currentTurn = 0;  // Réinitialise le tour à 0
-    }
-
-
-    public OperationMessage getNextTurn() {
-        if (currentTurn < turns.size()) {
-            return turns.get(currentTurn++);
-        }
-        return null;  // Plus de tours disponibles
-    }
-
-    public int getDuration() {
-        if (currentTurn > 0 && currentTurn <= turns.size()) {
-            return turns.get(currentTurn - 1).getData().getDuration();
-        }
-        return -1;  // Retourne -1 si aucun tour n'est disponible
-    }
-
 }
