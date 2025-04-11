@@ -1,6 +1,6 @@
 package com.spaceoperators.model.response;
 
-import com.spaceoperators.model.Player;
+import com.spaceoperators.model.entity.Player;
 import java.util.List;
 
 public class PlayerData {

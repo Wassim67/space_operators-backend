@@ -1,4 +1,4 @@
-package com.spaceoperators.model;
+package com.spaceoperators.model.entity;
 
 public class Player {
     private String playerId;

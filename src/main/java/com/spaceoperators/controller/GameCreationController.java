@@ -3,9 +3,8 @@ package com.spaceoperators.controller;
 import org.springframework.web.bind.annotation.*;
 import java.util.Random;
 
-import com.spaceoperators.dao.GameDao;
-import com.spaceoperators.dao.SessionDao;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.spaceoperators.repository.GameDao;
+import com.spaceoperators.repository.SessionDao;
 
 @RestController
 @RequestMapping("/api/create-game")
@@ -14,7 +13,6 @@ public class GameCreationController {
     private final GameDao gameDao;
     private final SessionDao sessionDao;
 
-    @Autowired
     public GameCreationController(GameDao gameDao, SessionDao sessionDao) {
         this.gameDao = gameDao;
         this.sessionDao = sessionDao;

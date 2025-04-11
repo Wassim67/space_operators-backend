@@ -1,6 +1,6 @@
 package com.spaceoperators.service;
 
-import com.spaceoperators.model.GameSession;
+import com.spaceoperators.model.entity.GameSession;
 import com.spaceoperators.model.response.OperationMessage;
 import org.springframework.stereotype.Service;
 
