@@ -1,6 +1,6 @@
-package com.spaceoperators.dao;
+package com.spaceoperators.repository;
 
-import com.spaceoperators.model.Player;
+import com.spaceoperators.model.entity.Player;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;

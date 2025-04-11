@@ -1,4 +1,4 @@
-package com.spaceoperators.model;
+package com.spaceoperators.model.entity;
 
 import com.spaceoperators.model.response.OperationMessage;
 import java.util.List;

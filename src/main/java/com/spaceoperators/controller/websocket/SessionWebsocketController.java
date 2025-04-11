@@ -1,21 +1,17 @@
 package com.spaceoperators.controller.websocket;
 
-import com.spaceoperators.dao.SessionDao;
-import com.spaceoperators.model.GameSession;
+import com.spaceoperators.repository.SessionDao;
+import com.spaceoperators.model.entity.GameSession;
 import com.spaceoperators.model.request.PlayerSessionRequest;
 import com.spaceoperators.model.response.OperationMessage;
 import com.spaceoperators.model.response.PlayerSessionResponse;
-import com.spaceoperators.model.Player;
+import com.spaceoperators.model.entity.Player;
 import com.spaceoperators.model.response.PlayerData;
 import com.spaceoperators.model.response.PlayerListResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.*;
 import com.spaceoperators.service.SessionService;
-
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,30 +20,32 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Controller
-@CrossOrigin(origins = "*")
 public class SessionWebsocketController {
 
-	@Autowired
 	private SessionDao sessionDao;
 
-	@Autowired
 	private SessionService sessionService;
 
 	// Map pour gérer les planifications par session
-	private final Map<String, ScheduledExecutorService> sessionSchedulers = new ConcurrentHashMap<>();
+	private final Map<String, ScheduledExecutorService> gameSchedulers = new ConcurrentHashMap<>();
 
 	// Map pour gérer les statuts des sessions
 	private final Map<String, Boolean> gameStatus = new ConcurrentHashMap<>();
 
-	private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();  // Création d'un ScheduledExecutorService c'est pour gerer la planification des tours
-
-	@Autowired
 	private SimpMessagingTemplate messagingTemplate;
 
 	// Constantes pour les types d'actions
 	private static final String ACTION_CONNECT = "connect";
 	private static final String ACTION_DISCONNECT = "disconnect";
-	private static final String ACTION_START = "start";
+
+
+	public SessionWebsocketController(SessionDao sessionDao,
+									  SessionService sessionService,
+									  SimpMessagingTemplate messagingTemplate) {
+		this.sessionDao = sessionDao;
+		this.sessionService = sessionService;
+		this.messagingTemplate = messagingTemplate;
+	}
 
 	/**
 	 * Traite les connexions des joueurs via WebSocket.
@@ -112,43 +110,12 @@ public class SessionWebsocketController {
 	}
 
 	/**
-	 * API REST pour mettre à jour l'état "isReady" d'un joueur. (envoie aussi un json pour le front avec la mise à jour des players)
-	 *
-	 * @param idPlayer L'identifiant du joueur.
-	 * @param player   L'objet contenant l'état "isReady".
-	 * @return Une réponse JSON indiquant le succès ou l'échec.
-	 */
-	@PostMapping("/api/player/ready/{idPlayer}")
-	@ResponseBody
-	public ResponseEntity<Map<String, Object>> updateReadyStatus(
-			@PathVariable("idPlayer") String idPlayer, @RequestBody Player player) {
-		try {
-			if (player.getReady() == null) {
-				return ResponseEntity.badRequest().body(Map.of("error", "'isReady' field is missing"));
-			}
-
-			// Met à jour l'état "isReady" du joueur
-			sessionDao.updatePlayerReady(idPlayer, player.getReady());
-
-			// Récupère le jeu auquel appartient le joueur
-			String gameId = sessionDao.getGameIdForPlayer(idPlayer);
-
-			// Notifie les abonnés WebSocket
-			notifyPlayers(gameId);
-
-			return ResponseEntity.ok(Map.of("message", "Player readiness updated successfully"));
-		} catch (Exception e) {
-			return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
-		}
-	}
-
-	/**
 	 * Démarre une session de jeu et lance les tours.
 	 *
 	 * @param message Le message contenant les données de la session.
 	 */
 	@MessageMapping("/start")
-	public void startGameSession(@RequestBody Map<String, Object> message) {
+	public void startGameSession(Map<String, Object> message) {
 		try {
 			Object data = message.get("data");
 			if (!(data instanceof Map)) {
@@ -175,7 +142,7 @@ public class SessionWebsocketController {
 			sendNextTurn(gameId);
 
 			// Crée un planificateur pour cette session de jeu
-			sessionSchedulers.putIfAbsent(gameId, Executors.newSingleThreadScheduledExecutor());
+			gameSchedulers.putIfAbsent(gameId, Executors.newSingleThreadScheduledExecutor());
 
 			// Planifie le prochain tour
 			scheduleNextTurn(gameId);
@@ -186,7 +153,7 @@ public class SessionWebsocketController {
 	}
 
 	@MessageMapping("/finish-operation")
-	public void handleFinishOperation(@RequestBody Map<String, Object> message) {
+	public void handleFinishOperation(Map<String, Object> message) {
 		try {
 			Object data = message.get("data");
 			if (!(data instanceof Map)) {
@@ -217,11 +184,12 @@ public class SessionWebsocketController {
 
 					// Vérifier si le vaisseau est détruit
 					if (session.getIntegrity() <= 0) {
+						// Le vaisseau est détruit, envoyer le message de fin de jeu
 						messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
 								"type", "destroyed",
 								"data", Map.of("turns", session.getCurrentTurn() - 1)
 						));
-						endGame(gameId);
+						endGame(gameId);  // Terminer la partie
 						return;
 					}
 				}
@@ -230,6 +198,7 @@ public class SessionWebsocketController {
 			sendErrorMessage("Failed to process finish message: " + e.getMessage());
 		}
 	}
+
 
 	private void scheduleNextTurn(String gameId) {
 		if (!gameStatus.getOrDefault(gameId, true)) {
@@ -242,7 +211,7 @@ public class SessionWebsocketController {
 		}
 
 		int duration = session.getDuration();
-		ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
+		ScheduledExecutorService scheduler = gameSchedulers.get(gameId);
 
 		if (scheduler != null) {
 			scheduler.schedule(() -> {
@@ -311,10 +280,10 @@ public class SessionWebsocketController {
 		gameStatus.remove(gameId);
 		sessionService.endSession(gameId);
 
-		ScheduledExecutorService scheduler = sessionSchedulers.get(gameId);
+		ScheduledExecutorService scheduler = gameSchedulers.get(gameId);
 		if (scheduler != null) {
 			scheduler.shutdown();
-			sessionSchedulers.remove(gameId);
+			gameSchedulers.remove(gameId);
 		}
 	}
 
