@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/question")
+@RequestMapping("/api/question")
 public class QuestionController {
 
     private QuestionService questionService;
@@ -26,6 +26,7 @@ public class QuestionController {
     @PostMapping
     public void save(@RequestBody EQuestion eQuestion) {
         System.out.println("QUESTION ORIGINALE : " + eQuestion.getQuestion());
+        System.out.println("Question reçue : " + eQuestion);
 
         // Formater la question via IA
         String formattedQuestion = aiFormatterService.formatQuestionWithGroq(eQuestion.getQuestion());
@@ -67,6 +68,7 @@ public class QuestionController {
         GetQuestionResponseDTO dto = new GetQuestionResponseDTO();
         dto.setId(entity.getId());
         dto.setQuestion(entity.getQuestion());
+
         return dto;
     }
 
