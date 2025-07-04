@@ -39,13 +39,14 @@ public class UserController {
         return jwtService.extractUserInformation(jwt);
     }
 
-    @RequestMapping("/user/all")
-    @GetMapping
-    public List<GetUserResponseDTO> get() {
-
-
-        return userService.get();
-    }
+//    @RequestMapping("/user/all")
+//    @GetMapping
+//    public List<Player> get() {
+//   // public List<GetUserResponseDTO> get() {
+//
+//        return playerService.findAll();
+//        //return userService.get();
+//    }
 
     @GetMapping("/me")
     public Map<String, Object> getProfile() {
