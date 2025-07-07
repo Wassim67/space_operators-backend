@@ -21,10 +21,10 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
     }
 
-    public void register(String email, String name, String rawPassword, String role) {
+    public void register(String email, String playerName, String rawPassword, String role) {
         String id = UUID.randomUUID().toString();
         String hashedPassword = passwordEncoder.encode(rawPassword);
-        playerDao.registerPlayer(id, email, name, hashedPassword, role);
+        playerDao.registerPlayer(id, email, playerName, hashedPassword, role);
     }
 
     public boolean authenticate(String email, String rawPassword) {
@@ -32,7 +32,7 @@ public class AuthService {
         if (playerOpt.isEmpty()) {
             return false;
         }
-        String storedHash = (String) playerOpt.get().get("pwd");
+        String storedHash = (String) playerOpt.get().get("password");
         return passwordEncoder.matches(rawPassword, storedHash);
     }
 
@@ -42,12 +42,12 @@ public class AuthService {
             throw new RuntimeException("Invalid credentials");
         }
 
-        String storedHash = (String) playerOpt.get().get("pwd");
+        String storedHash = (String) playerOpt.get().get("password");
         if (!passwordEncoder.matches(rawPassword, storedHash)) {
             throw new RuntimeException("Invalid credentials");
         }
 
-        String playerId = (String) playerOpt.get().get("id_player");
+        String playerId = (String) playerOpt.get().get("playerId");
         String role = (String) playerOpt.get().get("role");
 
         return jwtUtil.generateToken(playerId, role);
