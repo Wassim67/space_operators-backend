@@ -91,7 +91,8 @@ public class QuestionController {
         GetQuestionResponseDTO dto = new GetQuestionResponseDTO();
         dto.setId(entity.getId());
         dto.setQuestion(entity.getQuestion());
-
+        dto.setOptions(entity.getOptions());
+        dto.setCorrectOptionIndex(entity.getCorrectOptionIndex());
         return dto;
     }
 

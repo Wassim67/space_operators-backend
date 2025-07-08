@@ -51,10 +51,13 @@ public class QuestionService {
 
     public List<GetQuestionResponseDTO> get() {
         List<EQuestion> allQuestions = eQuestionRepository.findAll();
+
         return allQuestions.stream().map(q -> {
             GetQuestionResponseDTO dto = new GetQuestionResponseDTO();
             dto.setId(q.getId());
             dto.setQuestion(q.getQuestion());
+            dto.setCorrectOptionIndex(q.getCorrectOptionIndex());
+            dto.setOptions(q.getOptions());
             return dto;
         }).toList();
     }
