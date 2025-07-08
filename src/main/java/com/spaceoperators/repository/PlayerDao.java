@@ -61,5 +61,12 @@ public class PlayerDao {
         String sql = "SELECT playerId, playerName, email, role FROM player";
         return jdbcTemplate.queryForList(sql, new MapSqlParameterSource());
     }
+
+    public List<Map<String, Object>> getPlayerHistory(String playerId) {
+        String sql = "SELECT * FROM history WHERE playerId = :playerId ORDER BY someDateColumn DESC";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("playerId", playerId);
+        return jdbcTemplate.queryForList(sql, params);
+    }
 }
 

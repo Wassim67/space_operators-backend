@@ -24,13 +24,12 @@ public class GameCreationController {
         // TODO: améliorer la gestion de génération de numéro de partie
         // Crée un numéro aléatoire pour le jeu
         Random random = new Random();
-        int randomNumber = 1000 + random.nextInt(9000); // Génère un nombre entre 1000 et 9999
+        int randomNumber = 1000 + random.nextInt(9000);
 
-        // TODO : Intégrer la génération de thème avec l'IA
-        String choiceTheme = "Space Adventure";  // Temporaire
+        String choiceTheme = "Space Adventure";
         int integrity = 100;
-        String gameName = "space test";  // Temporaire
-        String state = "in_progress";  // Temporaire pour V2
+        String gameName = "space test";
+        String state = "wait";
 
         // Insérer le jeu dans la table game
         gameDao.insertGame(randomNumber, choiceTheme, integrity, gameName, state, null);

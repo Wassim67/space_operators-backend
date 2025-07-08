@@ -1,21 +1,39 @@
 package com.spaceoperators.model.response;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
-
 import java.util.List;
 
 public class OperationMessage {
-    @JsonUnwrapped // pour sérialiser les champs de la classe Data comme s'ils étaient directement dans la classe OperationMessage
+    @JsonUnwrapped // Sérialise les champs de Data comme s'ils étaient dans OperationMessage
     private Data data;
 
-    public OperationMessage(int turn, String role, String id, int duration, String description, List<Element> elements, Result result) {
-        this.data = new Data(turn, role, id, duration, description, elements, result);
+    // Constructeurs
+    public OperationMessage(int turn, String role, String id, int duration, String description,
+                            List<Element> elements, Result result, String playerId, String operatorId) {
+        this.data = new Data(turn, role, id, duration, description, elements, result, playerId, operatorId);
+    }
+
+    public OperationMessage(int turn, String role, String id, int duration, String description,
+                            List<Element> elements, Result result, String playerId) {
+        this.data = new Data(turn, role, id, duration, description, elements, result, playerId, null);
     }
 
     public Data getData() {
-        return data;
+        return this.data;
     }
 
+    // Getters délégués à data
+    public int getTurn() { return data.getTurn(); }
+    public String getRole() { return data.getRole(); }
+    public String getId() { return data.getId(); }
+    public int getDuration() { return data.getDuration(); }
+    public String getDescription() { return data.getDescription(); }
+    public List<Element> getElements() { return data.getElements(); }
+    public Result getResult() { return data.getResult(); }
+    public String getPlayerId() { return data.getPlayerId(); }
+    public String getOperatorId() { return data.getOperatorId(); }
+
+    // Setter si nécessaire
     public void setData(Data data) {
         this.data = data;
     }
@@ -28,8 +46,11 @@ public class OperationMessage {
         private String description;
         private List<Element> elements;
         private Result result;
+        private String playerId;
+        private String operatorId;
 
-        public Data(int turn, String role, String id, int duration, String description, List<Element> elements, Result result) {
+        public Data(int turn, String role, String id, int duration, String description,
+                    List<Element> elements, Result result, String playerId, String operatorId) {
             this.turn = turn;
             this.role = role;
             this.id = id;
@@ -37,64 +58,37 @@ public class OperationMessage {
             this.description = description;
             this.elements = elements;
             this.result = result;
+            this.playerId = playerId;
+            this.operatorId = operatorId;
         }
 
-        // Getters
-        public int getTurn() {
-            return turn;
-        }
+        // Getters & setters classiques
+        public int getTurn() { return turn; }
+        public void setTurn(int turn) { this.turn = turn; }
 
-        public void setTurn(int turn) {
-            this.turn = turn;
-        }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
 
-        public String getRole() {
-            return role;
-        }
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
 
-        public void setRole(String role) {
-            this.role = role;
-        }
+        public int getDuration() { return duration; }
+        public void setDuration(int duration) { this.duration = duration; }
 
-        public String getId() {
-            return id;
-        }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
 
-        public void setId(String id) {
-            this.id = id;
-        }
+        public List<Element> getElements() { return elements; }
+        public void setElements(List<Element> elements) { this.elements = elements; }
 
-        public int getDuration() {
-            return duration;
-        }
+        public Result getResult() { return result; }
+        public void setResult(Result result) { this.result = result; }
 
-        public void setDuration(int duration) {
-            this.duration = duration;
-        }
+        public String getPlayerId() { return playerId; }
+        public void setPlayerId(String playerId) { this.playerId = playerId; }
 
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public List<Element> getElements() {
-            return elements;
-        }
-
-        public void setElements(List<Element> elements) {
-            this.elements = elements;
-        }
-
-        public Result getResult() {
-            return result;
-        }
-
-        public void setResult(Result result) {
-            this.result = result;
-        }
+        public String getOperatorId() { return operatorId; }
+        public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
     }
 
     public static class Element {
@@ -110,38 +104,17 @@ public class OperationMessage {
             this.value = value;
         }
 
-        // Getters
-        public String getType() {
-            return type;
-        }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
 
-        public void setType(String type) {
-            this.type = type;
-        }
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
 
-        public int getId() {
-            return id;
-        }
+        public String getValueType() { return valueType; }
+        public void setValueType(String valueType) { this.valueType = valueType; }
 
-        public void setId(int id) {
-            this.id = id;
-        }
-
-        public String getValueType() {
-            return valueType;
-        }
-
-        public void setValueType(String valueType) {
-            this.valueType = valueType;
-        }
-
-        public Object getValue() {
-            return value;
-        }
-
-        public void setValue(Object value) {
-            this.value = value;
-        }
+        public Object getValue() { return value; }
+        public void setValue(Object value) { this.value = value; }
     }
 
     public static class Result {
@@ -155,30 +128,14 @@ public class OperationMessage {
             this.links = links;
         }
 
-        // Getters
-        public ButtonResult getButtons() {
-            return buttons;
-        }
+        public ButtonResult getButtons() { return buttons; }
+        public void setButtons(ButtonResult buttons) { this.buttons = buttons; }
 
-        public void setButtons(ButtonResult buttons) {
-            this.buttons = buttons;
-        }
+        public List<Integer> getSwitches() { return switches; }
+        public void setSwitches(List<Integer> switches) { this.switches = switches; }
 
-        public List<Integer> getSwitches() {
-            return switches;
-        }
-
-        public void setSwitches(List<Integer> switches) {
-            this.switches = switches;
-        }
-
-        public List<List<Integer>> getLinks() {
-            return links;
-        }
-
-        public void setLinks(List<List<Integer>> links) {
-            this.links = links;
-        }
+        public List<List<Integer>> getLinks() { return links; }
+        public void setLinks(List<List<Integer>> links) { this.links = links; }
     }
 
     public static class ButtonResult {
@@ -190,21 +147,10 @@ public class OperationMessage {
             this.ids = ids;
         }
 
-        // Getters
-        public String getOrder() {
-            return order;
-        }
+        public String getOrder() { return order; }
+        public void setOrder(String order) { this.order = order; }
 
-        public void setOrder(String order) {
-            this.order = order;
-        }
-
-        public List<Integer> getIds() {
-            return ids;
-        }
-
-        public void setIds(List<Integer> ids) {
-            this.ids = ids;
-        }
+        public List<Integer> getIds() { return ids; }
+        public void setIds(List<Integer> ids) { this.ids = ids; }
     }
 }

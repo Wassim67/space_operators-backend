@@ -31,7 +31,7 @@ public class PlayerSessionRequest {
 		this.playerName = playerName;
 	}
 
-	public Boolean getIsReadyPlayer() {
+	public Boolean getReadyPlayer() {
 		return isReady;
 	}
 }

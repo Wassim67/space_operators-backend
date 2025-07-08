@@ -1,4 +1,4 @@
-package com.spaceoperators.repositories;
+package com.spaceoperators.repository;
 
 import com.spaceoperators.model.EQuestion;
 import org.springframework.data.jpa.repository.JpaRepository;

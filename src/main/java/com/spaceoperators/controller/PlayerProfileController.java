@@ -1,5 +1,6 @@
 package com.spaceoperators.controller;
 
+import com.spaceoperators.model.entity.History;
 import com.spaceoperators.repository.PlayerDao;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,14 +23,17 @@ public class PlayerProfileController {
     public Map<String, Object> getProfile() {
         String playerId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 
-        // TODO: Supprimer cette vérification de "anonymousUser" une fois le JWT bien intégré
-        //if ("anonymousUser".equals(playerId)) {
-          //  throw new RuntimeException("Unauthorized: No valid player ID found");
-        //}
+        Map<String, Object> player = playerDao.getPlayerById(playerId)
+                .orElseThrow(() -> new RuntimeException("Player not found"));
 
         int gameCount = playerDao.countGamesByPlayerId(playerId);
-        return Map.of("playerId", playerId, "gamesPlayed", gameCount);
+        return Map.of(
+                "playerId", playerId,
+                "playerName", player.get("playerName"),
+                "gamesPlayed", gameCount
+        );
     }
+
 
     @GetMapping("/profile2")
     public Map<String, Object> getProfile2() {
@@ -65,6 +69,8 @@ public class PlayerProfileController {
                 "gamesPlayed", gameCount
         );
     }
+
+
 
     @GetMapping("/all")
     public List<Map<String, Object>> getAllPlayers() {

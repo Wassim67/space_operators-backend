@@ -2,12 +2,15 @@ package com.spaceoperators.controller;
 
 import com.spaceoperators.model.EQuestion;
 import com.spaceoperators.payload.responses.GetQuestionResponseDTO;
-import com.spaceoperators.repositories.EQuestionRepository;
+import com.spaceoperators.repository.EQuestionRepository;
 import com.spaceoperators.service.AIFormatterService;
 import com.spaceoperators.service.QuestionService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/question")
@@ -24,19 +27,47 @@ public class QuestionController {
     }
 
     @PostMapping
-    public void save(@RequestBody EQuestion eQuestion) {
+    public EQuestion save(@RequestBody EQuestion eQuestion) {
         System.out.println("QUESTION ORIGINALE : " + eQuestion.getQuestion());
-        System.out.println("Question reçue : " + eQuestion);
 
-        // Formater la question via IA
-        String formattedQuestion = aiFormatterService.formatQuestionWithGroq(eQuestion.getQuestion());
+        // Appelle IA uniquement pour générer options + indexes corrects (sans reformater la question)
+        String prompt = "Génère EXACTEMENT dans ce format : " +
+                "\"option1, option2, option3, option4 ; indexes_corrects\" " +
+                "où indexes_corrects sont les positions (1-based) des bonnes réponses séparées par des virgules. " +
+                "Tu dois toujours fournir 4 options, même si certaines sont fausses. " +
+                "Exemple : \"Rouge, Bleu, Vert, Jaune ; 1,2\". " +
+                "Ne dépasse pas 255 caractères.";
 
-        System.out.println("QUESTION FORMATTÉE : " + formattedQuestion);
+        String formattedResponse = aiFormatterService.formatQuestionWithGroqWithCustomPrompt(eQuestion.getQuestion(), prompt);
 
-        eQuestion.setQuestion(formattedQuestion);
+        if (formattedResponse == null || formattedResponse.isBlank()) {
+            throw new RuntimeException("Erreur lors du formatage IA, réponse vide");
+        }
 
-        eQuestionRepository.save(eQuestion);
+        // Parsing simple : "option1, option2, option3, option4 ; 1,3"
+        String[] parts = formattedResponse.split(";");
+        if (parts.length < 2) {
+            throw new RuntimeException("Réponse IA mal formatée : " + formattedResponse);
+        }
+
+        String optionsPart = parts[0].trim();
+        String correctIndexes = parts[1].trim();
+
+        List<String> optionsList = Arrays.stream(optionsPart.split(","))
+                .map(String::trim)
+                .toList();
+
+
+        eQuestion.setOptions(optionsList);
+        eQuestion.setCorrectOptionIndex(correctIndexes);
+
+
+        EQuestion saved = eQuestionRepository.save(eQuestion);
+        System.out.println("Question sauvegardée : " + saved);
+        return saved;
     }
+
+
 
 
     @RequestMapping("/all")
@@ -53,14 +84,6 @@ public class QuestionController {
         eQuestionRepository.deleteById(id);
     }
 
-    @PutMapping("/edit/{id}")
-    public void update0(@PathVariable Long id, @RequestBody EQuestion eQuestion) {
-        EQuestion existing = eQuestionRepository.findById(id).orElse(null);
-        if (existing != null) {
-            existing.setQuestion(eQuestion.getQuestion());
-            eQuestionRepository.save(existing);
-        }
-    }
 
     @GetMapping("/{id}")
     public GetQuestionResponseDTO getById(@PathVariable Long id) {
@@ -68,16 +91,23 @@ public class QuestionController {
         GetQuestionResponseDTO dto = new GetQuestionResponseDTO();
         dto.setId(entity.getId());
         dto.setQuestion(entity.getQuestion());
-
+        dto.setOptions(entity.getOptions());
+        dto.setCorrectOptionIndex(entity.getCorrectOptionIndex());
         return dto;
     }
 
     @PutMapping("/{id}")
-    public void update(@PathVariable Long id, @RequestBody EQuestion question) {
-        System.out.println("Question update");
+    public EQuestion update(@PathVariable Long id, @RequestBody EQuestion eQuestion) {
+        EQuestion existing = eQuestionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Question not found"));
 
-        question.setId(id); // forcer la bonne ID
-        eQuestionRepository.save(question);
+        existing.setQuestion(eQuestion.getQuestion());
+        existing.setOptions(eQuestion.getOptions());
+        existing.setCorrectOptionIndex(eQuestion.getCorrectOptionIndex());
+
+        EQuestion saved = eQuestionRepository.save(existing);
+        System.out.println("Question mise à jour : " + saved);
+        return saved;
     }
 
 
