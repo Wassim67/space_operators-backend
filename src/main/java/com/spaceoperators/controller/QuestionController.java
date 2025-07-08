@@ -84,14 +84,6 @@ public class QuestionController {
         eQuestionRepository.deleteById(id);
     }
 
-    @PutMapping("/edit/{id}")
-    public void update0(@PathVariable Long id, @RequestBody EQuestion eQuestion) {
-        EQuestion existing = eQuestionRepository.findById(id).orElse(null);
-        if (existing != null) {
-            existing.setQuestion(eQuestion.getQuestion());
-            eQuestionRepository.save(existing);
-        }
-    }
 
     @GetMapping("/{id}")
     public GetQuestionResponseDTO getById(@PathVariable Long id) {
@@ -104,11 +96,17 @@ public class QuestionController {
     }
 
     @PutMapping("/{id}")
-    public void update(@PathVariable Long id, @RequestBody EQuestion question) {
-        System.out.println("Question update");
+    public EQuestion update(@PathVariable Long id, @RequestBody EQuestion eQuestion) {
+        EQuestion existing = eQuestionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Question not found"));
 
-        question.setId(id); // forcer la bonne ID
-        eQuestionRepository.save(question);
+        existing.setQuestion(eQuestion.getQuestion());
+        existing.setOptions(eQuestion.getOptions());
+        existing.setCorrectOptionIndex(eQuestion.getCorrectOptionIndex());
+
+        EQuestion saved = eQuestionRepository.save(existing);
+        System.out.println("Question mise à jour : " + saved);
+        return saved;
     }
 
 
