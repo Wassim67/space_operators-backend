@@ -1,10 +1,11 @@
 package com.spaceoperators.service;
 
 import com.spaceoperators.model.entity.Player;
-import com.spaceoperators.repositories.PlayerRepository;
+import com.spaceoperators.repository.PlayerRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class PlayerServiceImpl implements PlayerService {
@@ -23,10 +24,17 @@ public class PlayerServiceImpl implements PlayerService {
         return playerRepository.findById(id).orElse(null);
     }
 
-    public void update(String id, Player player) {
-        if (playerRepository.existsById(id)) {
-            player.setPlayerId(id); // s'assurer que l’ID reste cohérent
-            playerRepository.save(player);
+    @Override
+    public void update(String id, Player updatedPlayer) {
+        Optional<Player> optional = playerRepository.findById(id);
+        if (optional.isPresent()) {
+            Player existing = optional.get();
+            existing.setPlayerName(updatedPlayer.getPlayerName());
+            existing.setEmail(updatedPlayer.getEmail());
+            existing.setRole(updatedPlayer.getRole());
+
+
+            playerRepository.save(existing);
         }
     }
 

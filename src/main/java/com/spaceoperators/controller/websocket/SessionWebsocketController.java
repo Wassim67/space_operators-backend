@@ -1,86 +1,74 @@
 package com.spaceoperators.controller.websocket;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spaceoperators.model.entity.History;
+import com.spaceoperators.repository.HistoryRepository;
 import com.spaceoperators.repository.SessionDao;
 import com.spaceoperators.model.entity.GameSession;
 import com.spaceoperators.model.request.PlayerSessionRequest;
-import com.spaceoperators.model.response.OperationMessage;
-import com.spaceoperators.model.response.PlayerSessionResponse;
 import com.spaceoperators.model.entity.Player;
 import com.spaceoperators.model.response.PlayerData;
 import com.spaceoperators.model.response.PlayerListResponse;
+import com.spaceoperators.model.response.PlayerSessionResponse;
+import com.spaceoperators.model.response.OperationMessage;
+import com.spaceoperators.service.SessionService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-import com.spaceoperators.service.SessionService;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @Controller
 public class SessionWebsocketController {
 
-	private SessionDao sessionDao;
-
-	private SessionService sessionService;
-
-	// Map pour gérer les planifications par session
+	private final SessionDao sessionDao;
+	private final SessionService sessionService;
 	private final Map<String, ScheduledExecutorService> gameSchedulers = new ConcurrentHashMap<>();
-
-	// Map pour gérer les statuts des sessions
 	private final Map<String, Boolean> gameStatus = new ConcurrentHashMap<>();
+	private final SimpMessagingTemplate messagingTemplate;
+	private final HistoryRepository historyRepository;
 
-	private SimpMessagingTemplate messagingTemplate;
-
-	// Constantes pour les types d'actions
 	private static final String ACTION_CONNECT = "connect";
 	private static final String ACTION_DISCONNECT = "disconnect";
 
 
 	public SessionWebsocketController(SessionDao sessionDao,
 									  SessionService sessionService,
-									  SimpMessagingTemplate messagingTemplate) {
+									  SimpMessagingTemplate messagingTemplate,
+									  HistoryRepository historyRepository) {
 		this.sessionDao = sessionDao;
 		this.sessionService = sessionService;
 		this.messagingTemplate = messagingTemplate;
+		this.historyRepository = historyRepository;
 	}
 
-	/**
-	 * Traite les connexions des joueurs via WebSocket.
-	 */
+	// Map<gameId, Map<playerId, List<buttonIdClickedInOrder>>>
+	private final Map<String, Map<String, List<Integer>>> playerProgression = new ConcurrentHashMap<>();
+
 	@MessageMapping("/connect")
 	public void connectToGame(PlayerSessionRequest request) {
 		processPlayerEvent(request, ACTION_CONNECT);
 	}
 
-	/**
-	 * Traite les déconnexions des joueurs via WebSocket.
-	 */
 	@MessageMapping("/disconnect")
 	public void disconnectFromGame(PlayerSessionRequest request) {
 		processPlayerEvent(request, ACTION_DISCONNECT);
 	}
 
-	/**
-	 * Gère les événements des joueurs (connexion ou déconnexion).
-	 *
-	 * @param request L'objet contenant les informations du joueur.
-	 * @param action  L'action à effectuer : connect ou disconnect.
-	 */
 	private void processPlayerEvent(PlayerSessionRequest request, String action) {
 		if (isInvalidRequest(request)) {
 			sendErrorMessage("Invalid data provided for " + action);
 			return;
 		}
-
-		// ➔ PROTECTION AJOUTÉE ICI
 		if (!sessionDao.gameExists(request.getGameId())) {
 			sendErrorMessage("Game with id " + request.getGameId() + " does not exist.");
 			return;
 		}
-
 		try {
 			if (ACTION_CONNECT.equals(action)) {
 				sessionDao.removePlayerFromAllSessions(request.getPlayerId());
@@ -88,201 +76,261 @@ public class SessionWebsocketController {
 			} else if (ACTION_DISCONNECT.equals(action)) {
 				sessionDao.removeSession(request.getGameId(), request.getPlayerId());
 			}
-
 			notifyPlayers(request.getGameId());
 		} catch (Exception e) {
 			sendErrorMessage("Failed to " + action + " player: " + e.getMessage());
 		}
 	}
 
-
-	/**
-	 * Vérifie si une requête de joueur est invalide.
-	 */
 	private boolean isInvalidRequest(PlayerSessionRequest request) {
 		return request.getGameId() == null || request.getGameId().isEmpty() ||
 				request.getPlayerId() == null || request.getPlayerId().isEmpty() ||
 				request.getPlayerName() == null || request.getPlayerName().isEmpty();
 	}
 
-	/**
-	 * Notifie les abonnés WebSocket de la liste mise à jour des joueurs de la session.
-	 */
 	private void notifyPlayers(String gameId) {
 		List<Player> players = sessionDao.getPlayersInSession(gameId);
 		PlayerListResponse response = new PlayerListResponse("players", new PlayerData(players));
 		messagingTemplate.convertAndSend("/topic/game/" + gameId, response);
 	}
 
-	/**
-	 * Démarre une session de jeu et lance les tours.
-	 *
-	 * @param message Le message contenant les données de la session.
-	 */
 	@MessageMapping("/start")
 	public void startGameSession(Map<String, Object> message) {
 		try {
 			Object data = message.get("data");
-			if (!(data instanceof Map)) {
-				sendErrorMessage("Invalid message format: 'data' is not a valid object");
-				return;
-			}
-
 			String gameId = (String) ((Map<?, ?>) data).get("gameId");
-			if (gameId == null || gameId.isEmpty()) {
-				sendErrorMessage("Invalid message format: 'gameId' is missing or empty");
+			List<Player> players = sessionDao.getPlayersInSession(gameId);
+
+			if (players == null || players.size() < 2) {
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "error",
+						"message", "Il faut minimum 2 joueurs pour commencer la partie !"
+				));
 				return;
 			}
 
-			if (!sessionDao.gameExists(gameId)) {
-				sendErrorMessage("Cannot start: game with id " + gameId + " does not exist.");
-				return;
+			if (sessionService.getGameSession(gameId) == null) {
+				sessionService.createSession(gameId, sessionService.generateTurnsFromDb(players, 10));
 			}
 
-			sessionDao.resetReadyStatus(gameId);
-			notifyPlayers(gameId);
-			sessionService.startNewGame(gameId);
 			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of("type", "start"));
-			gameStatus.put(gameId, true);
 			sendNextTurn(gameId);
-			gameSchedulers.putIfAbsent(gameId, Executors.newSingleThreadScheduledExecutor());
-			scheduleNextTurn(gameId);
 
 		} catch (Exception e) {
 			sendErrorMessage("Failed to process 'start' message: " + e.getMessage());
 		}
 	}
 
-
-
 	@MessageMapping("/finish-operation")
 	public void handleFinishOperation(Map<String, Object> message) {
+		Object data = message.get("data");
+		if (!(data instanceof Map)) return;
+		Map<?, ?> dataMap = (Map<?, ?>) data;
+
+		// Log complet reçu (formaté)
 		try {
-			Object data = message.get("data");
-			if (!(data instanceof Map)) {
-				sendErrorMessage("Invalid message format");
-				return;
-			}
-
-			Map<?, ?> dataMap = (Map<?, ?>) data;
-			String operator = (String) dataMap.get("operator");
-			Boolean success = (Boolean) dataMap.get("success");
-
-			// Récupérer le gameId à partir de l'opérateur
-			String gameId = sessionDao.getGameIdForPlayer(operator);
-			GameSession session = sessionService.getGameSession(gameId);
-
-			if (session != null) {
-				session.setTurnCompleted(true);
-
-				if (!success) {
-					// Si l'opération a échoué, diminuer l'intégrité
-					session.decreaseIntegrity(10);
-
-					// Envoyer la mise à jour de l'intégrité
-					messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-							"type", "integrity",
-							"data", Map.of("integrity", session.getIntegrity())
-					));
-
-					// Vérifier si le vaisseau est détruit
-					if (session.getIntegrity() <= 0) {
-						// Le vaisseau est détruit, envoyer le message de fin de jeu
-						messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-								"type", "destroyed",
-								"data", Map.of("turns", session.getCurrentTurn() - 1)
-						));
-						endGame(gameId);  // Terminer la partie
-						return;
-					}
-				}
-			}
+			ObjectMapper mapper = new ObjectMapper();
+			String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(dataMap);
+			System.out.println("Received finish-operation data from front:\n" + json);
 		} catch (Exception e) {
-			sendErrorMessage("Failed to process finish message: " + e.getMessage());
+			System.out.println("Error logging finish-operation data: " + e.getMessage());
 		}
-	}
 
+		String gameId = (String) dataMap.get("gameId");
+		String playerId = (String) dataMap.get("operator");
+		Integer clickedButtonId = (Integer) dataMap.get("result");
 
-	private void scheduleNextTurn(String gameId) {
-		if (!gameStatus.getOrDefault(gameId, true)) {
+		if (gameId == null || playerId == null || clickedButtonId == null) {
+			sendErrorMessage("gameId, playerId ou buttonId manquant dans finish-operation");
 			return;
 		}
 
 		GameSession session = sessionService.getGameSession(gameId);
-		if (session == null) {
+		if (session == null) return;
+
+		int currentTurnIdx = session.getCurrentTurn() - 1;
+		if (currentTurnIdx < 0 || currentTurnIdx >= session.getTurns().size()) {
+			sendErrorMessage("Tour courant invalide");
 			return;
 		}
 
-		int duration = session.getDuration();
-		ScheduledExecutorService scheduler = gameSchedulers.get(gameId);
+		List<OperationMessage> currentTurnOps = session.getTurns().get(currentTurnIdx);
+		Optional<OperationMessage> optInspectorOp = currentTurnOps.stream()
+				.filter(op -> "inspector".equals(op.getData().getRole()))
+				.findFirst();
 
-		if (scheduler != null) {
-			scheduler.schedule(() -> {
-				// Vérifier si le tour a été complété
-				if (!session.isTurnCompleted()) {
-					// Diminuer l'intégrité car le tour n'a pas été complété à temps
-					session.decreaseIntegrity(30);
+		if (optInspectorOp.isEmpty()) {
+			sendErrorMessage("Pas d'opération inspector trouvée pour ce tour");
+			return;
+		}
 
-					// Envoyer la mise à jour de l'intégrité
-					messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-							"type", "integrity",
-							"data", Map.of("integrity", session.getIntegrity())
-					));
+		OperationMessage inspectorOp = optInspectorOp.get();
+		List<Integer> expectedSequence = inspectorOp.getData().getResult().getButtons().getIds();
 
-					// Vérifier si le vaisseau est détruit
-					if (session.getIntegrity() <= 0) {
-						messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-								"type", "destroyed",
-								"data", Map.of("turns", session.getCurrentTurn())
-						));
-						endGame(gameId);
-						return;
-					}
+		playerProgression.putIfAbsent(gameId, new ConcurrentHashMap<>());
+		Map<String, List<Integer>> progressByPlayer = playerProgression.get(gameId);
+		progressByPlayer.putIfAbsent(playerId, new ArrayList<>());
+		List<Integer> currentProgress = progressByPlayer.get(playerId);
+
+		int expectedIndex = currentProgress.size();
+
+		// Log comparaison front/back
+		System.out.println("Comparaison bouton cliqué avec séquence attendue :");
+		System.out.println("Bouton cliqué par le joueur : " + clickedButtonId);
+		System.out.println("Prochaine valeur attendue dans la séquence : " +
+				(expectedIndex < expectedSequence.size() ? expectedSequence.get(expectedIndex) : "Fin de séquence"));
+
+		if (expectedIndex < expectedSequence.size() && clickedButtonId.equals(expectedSequence.get(expectedIndex))) {
+			// Clic correct
+			currentProgress.add(clickedButtonId);
+
+			if (currentProgress.size() == expectedSequence.size()) {
+				// Séquence terminée => stop timer, reset progression
+				ScheduledExecutorService scheduler = gameSchedulers.get(gameId);
+				if (scheduler != null) {
+					scheduler.shutdownNow();
+					gameSchedulers.remove(gameId);
 				}
+
+				progressByPlayer.put(playerId, new ArrayList<>());
+
+				System.out.println("Player " + playerId + " a validé la séquence complète pour game " + gameId);
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "success",
+						"message", "Séquence complète validée !",
+						"playerId", playerId
+				));
+
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "integrity",
+						"data", Map.of("integrity", session.getIntegrity())
+				));
 
 				sendNextTurn(gameId);
-				scheduleNextTurn(gameId);
-			}, duration + 5, TimeUnit.SECONDS);
+			} else {
+				System.out.println("Player " + playerId + " a validé une partie de la séquence : " + currentProgress);
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "progress",
+						"message", "Bouton correct, continue la séquence.",
+						"playerId", playerId,
+						"progress", currentProgress
+				));
+			}
+
+		} else {
+			// Clic incorrect, reset progression
+			progressByPlayer.put(playerId, new ArrayList<>());
+
+			System.out.println("Player " + playerId + " a cliqué un mauvais bouton (" + clickedButtonId + ") pour game " + gameId);
+			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+					"type", "error",
+					"message", "Bouton incorrect, recommence la séquence.",
+					"playerId", playerId,
+					"clickedButtonId", clickedButtonId
+			));
 		}
 	}
 
 
 
-	/**
-	 * Envoie le prochain tour pour une session donnée.
-	 *
-	 * @param gameId L'identifiant du jeu.
-	 */
+
 	private void sendNextTurn(String gameId) {
 		GameSession session = sessionService.getGameSession(gameId);
-		if (session == null || !gameStatus.getOrDefault(gameId, false)) {
-			return;
-		}
+		if (session == null) return;
+		List<OperationMessage> nextOps = session.getNextTurnForAllPlayers();
 
-		OperationMessage nextTurn = session.getNextTurn();
-		if (nextTurn != null) {
-			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-					"type", "operation",
-					"data", nextTurn
-			));
+		if (nextOps != null) {
+			int maxDuration = nextOps.stream()
+					.mapToInt(op -> op.getData().getDuration())
+					.max()
+					.orElse(10);
 
-			// Vérifier si c'est le dernier tour réussi (20 tours)
-			if (session.getCurrentTurn() >= 5 && session.getIntegrity() > 0) {
+			for (OperationMessage op : nextOps) {
+				try {
+					ObjectMapper objectMapper = new ObjectMapper();
+					String json = objectMapper.writeValueAsString(Map.of(
+							"type", "operation",
+							"data", op
+					));
+					System.out.println("ENVOI COMPLET AU FRONT : " + json);
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				}
+
 				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
-						"type", "victory"
+						"type", "operation",
+						"data", op
 				));
-				endGame(gameId);
 			}
+
+			ScheduledExecutorService scheduler = gameSchedulers.computeIfAbsent(gameId,
+					id -> java.util.concurrent.Executors.newSingleThreadScheduledExecutor());
+			scheduler.schedule(() -> {
+				GameSession sess = sessionService.getGameSession(gameId);
+				if (sess == null) return;
+
+				int newIntegrity = sess.getIntegrity() - 20;
+				sess.setIntegrity(newIntegrity);
+
+				try {
+					ObjectMapper objectMapper = new ObjectMapper();
+					String json = objectMapper.writeValueAsString(Map.of(
+							"type", "integrity",
+							"data", Map.of("integrity", newIntegrity)
+					));
+					System.out.println("ENVOI INTEGRITY AUTO : " + json);
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				}
+
+				messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+						"type", "integrity",
+						"data", Map.of("integrity", newIntegrity)
+				));
+
+				if (newIntegrity <= 0) {
+					int turnsDone = sess.getCurrentTurn();
+
+					messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+							"type", "destroyed",
+							"data", Map.of("turns", turnsDone)
+					));
+					endGame(gameId);
+				} else {
+					sendNextTurn(gameId);
+				}
+			}, maxDuration, java.util.concurrent.TimeUnit.SECONDS);
+
 		} else {
+			int turnsDone = session.getCurrentTurn();
+
+			messagingTemplate.convertAndSend("/topic/game/" + gameId, Map.of(
+					"type", "victory",
+					"data", Map.of("turns", turnsDone)
+			));
 			endGame(gameId);
 		}
 	}
 
 	private void endGame(String gameId) {
-		// Nettoyage de la session
 		gameStatus.remove(gameId);
-		sessionService.endSession(gameId);
+		GameSession session = sessionService.getGameSession(gameId);
 
+		if (session != null) {
+			History history = new History();
+			history.setIdHistory(gameId);
+			history.setTurnsPlayed(String.valueOf(session.getCurrentTurn()));
+			history.setResultGame("Integrity at end: " + session.getIntegrity());
+
+			try {
+				historyRepository.save(history);
+				System.out.println("Historique sauvegardé pour gameId " + gameId);
+			} catch (Exception e) {
+				System.err.println("Erreur sauvegarde historique : " + e.getMessage());
+			}
+		}
+
+		sessionService.endSession(gameId);
 		ScheduledExecutorService scheduler = gameSchedulers.get(gameId);
 		if (scheduler != null) {
 			scheduler.shutdown();
@@ -290,12 +338,8 @@ public class SessionWebsocketController {
 		}
 	}
 
-	/**
-	 * Envoie un message d'erreur à tous les abonnés.
-	 *
-	 * @param message Le message d'erreur à envoyer.
-	 */
 	private void sendErrorMessage(String message) {
 		messagingTemplate.convertAndSend("/topic/game", new PlayerSessionResponse("error", message));
 	}
+
 }

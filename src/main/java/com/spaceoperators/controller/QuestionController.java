@@ -2,7 +2,7 @@ package com.spaceoperators.controller;
 
 import com.spaceoperators.model.EQuestion;
 import com.spaceoperators.payload.responses.GetQuestionResponseDTO;
-import com.spaceoperators.repositories.EQuestionRepository;
+import com.spaceoperators.repository.EQuestionRepository;
 import com.spaceoperators.service.AIFormatterService;
 import com.spaceoperators.service.QuestionService;
 import org.springframework.web.bind.annotation.*;

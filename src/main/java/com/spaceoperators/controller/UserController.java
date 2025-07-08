@@ -72,7 +72,6 @@ public class UserController {
         );
     }
 
-    // ✅ GET un joueur par son ID (String)
     @GetMapping("/player/{id}")
     public ResponseEntity<Player> getById(@PathVariable String id) {
         Player player = playerService.findById(id);
@@ -83,14 +82,12 @@ public class UserController {
         }
     }
 
-    // ✅ PUT : mise à jour d’un joueur
     @PutMapping("/player/{id}")
     public ResponseEntity<Void> update(@PathVariable String id, @RequestBody Player player) {
         playerService.update(id, player);
         return ResponseEntity.ok().build();
     }
 
-    // ✅ DELETE : suppression d’un joueur
     @DeleteMapping("/player/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         playerService.delete(id);

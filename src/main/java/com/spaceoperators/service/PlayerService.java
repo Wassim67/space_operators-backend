@@ -1,8 +1,6 @@
 package com.spaceoperators.service;
 
 import com.spaceoperators.model.entity.Player;
-import com.spaceoperators.repositories.PlayerRepository;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 

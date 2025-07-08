@@ -1,4 +1,4 @@
-package com.spaceoperators.api;
+package com.spaceoperators.controller;
 
 import com.spaceoperators.repository.SessionDao;
 import com.spaceoperators.model.entity.Player;
@@ -36,7 +36,7 @@ public class SessionRestController {
             @RequestBody Player player) {
         try {
             if (player.getReady() == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "'isReady' field is missing"));
+                return ResponseEntity.badRequest().body(Map.of("error", "'ready' field is missing"));
             }
 
             sessionDao.updatePlayerReady(idPlayer, player.getReady());

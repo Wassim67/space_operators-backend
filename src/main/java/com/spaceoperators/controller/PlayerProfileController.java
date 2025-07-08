@@ -22,14 +22,17 @@ public class PlayerProfileController {
     public Map<String, Object> getProfile() {
         String playerId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 
-        // TODO: Supprimer cette vérification de "anonymousUser" une fois le JWT bien intégré
-        //if ("anonymousUser".equals(playerId)) {
-          //  throw new RuntimeException("Unauthorized: No valid player ID found");
-        //}
+        Map<String, Object> player = playerDao.getPlayerById(playerId)
+                .orElseThrow(() -> new RuntimeException("Player not found"));
 
         int gameCount = playerDao.countGamesByPlayerId(playerId);
-        return Map.of("playerId", playerId, "gamesPlayed", gameCount);
+        return Map.of(
+                "playerId", playerId,
+                "playerName", player.get("playerName"),
+                "gamesPlayed", gameCount
+        );
     }
+
 
     @GetMapping("/profile2")
     public Map<String, Object> getProfile2() {
@@ -64,6 +67,17 @@ public class PlayerProfileController {
                 "role", player.get("role"),
                 "gamesPlayed", gameCount
         );
+    }
+
+
+    @GetMapping("/stats")
+    public List<Map<String, Object>> getPlayerStats() {
+        String playerId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        playerDao.getPlayerById(playerId)
+                .orElseThrow(() -> new RuntimeException("Player not found"));
+
+        return playerDao.getPlayerHistory(playerId);
     }
 
     @GetMapping("/all")
