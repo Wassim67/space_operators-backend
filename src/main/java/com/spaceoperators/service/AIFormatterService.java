@@ -12,7 +12,7 @@ import java.util.Map;
 @Service
 public class AIFormatterService {
 
-    @Value("")
+    @Value("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")
     private String groqApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();

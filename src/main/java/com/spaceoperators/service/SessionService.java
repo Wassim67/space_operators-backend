@@ -199,7 +199,7 @@ public class SessionService {
             for (int i = 0; i < question.getOptions().size(); i++) {
                 int btnId = i + 1;
                 String optionText = question.getOptions().get(i);
-                String rgbColor = COLOR_MAP.getOrDefault(optionText, "#FFFFFF"); // blanc par défaut
+                String rgbColor = COLOR_MAP.getOrDefault(optionText, "#3498db"); // blanc par défaut
 
                 // Envoie couleur dans value, texte dans type (à adapter selon front)
                 elements.add(new OperationMessage.Element("button", btnId, optionText, rgbColor));

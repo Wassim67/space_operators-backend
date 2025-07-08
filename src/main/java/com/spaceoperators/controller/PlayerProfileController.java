@@ -1,5 +1,6 @@
 package com.spaceoperators.controller;
 
+import com.spaceoperators.model.entity.History;
 import com.spaceoperators.repository.PlayerDao;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -70,15 +71,6 @@ public class PlayerProfileController {
     }
 
 
-    @GetMapping("/stats")
-    public List<Map<String, Object>> getPlayerStats() {
-        String playerId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-
-        playerDao.getPlayerById(playerId)
-                .orElseThrow(() -> new RuntimeException("Player not found"));
-
-        return playerDao.getPlayerHistory(playerId);
-    }
 
     @GetMapping("/all")
     public List<Map<String, Object>> getAllPlayers() {

@@ -10,6 +10,9 @@ public class History {
     @Column(name = "id_history")
     private String idHistory;
 
+    @Column(name = "player_id")
+    private String playerId;
+
     @Column(name = "result_game")
     private String resultGame;
 
@@ -20,9 +23,13 @@ public class History {
     public String getIdHistory() { return idHistory; }
     public void setIdHistory(String idHistory) { this.idHistory = idHistory; }
 
+    public String getPlayerId() { return playerId; }
+    public void setPlayerId(String playerId) { this.playerId = playerId; }
+
     public String getResultGame() { return resultGame; }
     public void setResultGame(String resultGame) { this.resultGame = resultGame; }
 
     public String getTurnsPlayed() { return turnsPlayed; }
     public void setTurnsPlayed(String turnsPlayed) { this.turnsPlayed = turnsPlayed; }
 }
+
