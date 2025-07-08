@@ -211,7 +211,7 @@ public class SessionService {
                     "inspector",
                     "IN-" + (t + 1),
                     durations[Math.min(t, durations.length - 1)],
-                    "Quelle est la bonne réponse à la question : " + question.getQuestion(),
+                    question.getQuestion(),
                     elements,
                     new OperationMessage.Result(
                             new OperationMessage.ButtonResult("ordered", validButtonIds),

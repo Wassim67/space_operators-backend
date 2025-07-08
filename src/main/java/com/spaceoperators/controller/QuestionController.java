@@ -7,7 +7,10 @@ import com.spaceoperators.service.AIFormatterService;
 import com.spaceoperators.service.QuestionService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/question")
@@ -24,19 +27,47 @@ public class QuestionController {
     }
 
     @PostMapping
-    public void save(@RequestBody EQuestion eQuestion) {
+    public EQuestion save(@RequestBody EQuestion eQuestion) {
         System.out.println("QUESTION ORIGINALE : " + eQuestion.getQuestion());
-        System.out.println("Question reçue : " + eQuestion);
 
-        // Formater la question via IA
-        String formattedQuestion = aiFormatterService.formatQuestionWithGroq(eQuestion.getQuestion());
+        // Appelle IA uniquement pour générer options + indexes corrects (sans reformater la question)
+        String prompt = "Génère EXACTEMENT dans ce format : " +
+                "\"option1, option2, option3, option4 ; indexes_corrects\" " +
+                "où indexes_corrects sont les positions (1-based) des bonnes réponses séparées par des virgules. " +
+                "Tu dois toujours fournir 4 options, même si certaines sont fausses. " +
+                "Exemple : \"Rouge, Bleu, Vert, Jaune ; 1,2\". " +
+                "Ne dépasse pas 255 caractères.";
 
-        System.out.println("QUESTION FORMATTÉE : " + formattedQuestion);
+        String formattedResponse = aiFormatterService.formatQuestionWithGroqWithCustomPrompt(eQuestion.getQuestion(), prompt);
 
-        eQuestion.setQuestion(formattedQuestion);
+        if (formattedResponse == null || formattedResponse.isBlank()) {
+            throw new RuntimeException("Erreur lors du formatage IA, réponse vide");
+        }
 
-        eQuestionRepository.save(eQuestion);
+        // Parsing simple : "option1, option2, option3, option4 ; 1,3"
+        String[] parts = formattedResponse.split(";");
+        if (parts.length < 2) {
+            throw new RuntimeException("Réponse IA mal formatée : " + formattedResponse);
+        }
+
+        String optionsPart = parts[0].trim();
+        String correctIndexes = parts[1].trim();
+
+        List<String> optionsList = Arrays.stream(optionsPart.split(","))
+                .map(String::trim)
+                .toList();
+
+
+        eQuestion.setOptions(optionsList);
+        eQuestion.setCorrectOptionIndex(correctIndexes);
+
+
+        EQuestion saved = eQuestionRepository.save(eQuestion);
+        System.out.println("Question sauvegardée : " + saved);
+        return saved;
     }
+
+
 
 
     @RequestMapping("/all")
